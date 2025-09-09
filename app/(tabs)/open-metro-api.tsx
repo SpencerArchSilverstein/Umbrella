@@ -1,70 +1,55 @@
-import { fetchWeatherApi } from "openmeteo";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
-async function loadWeatherData() {
-  const params = {
-    latitude: 52.52,
-    longitude: 13.41,
-    hourly: "temperature_2m",
-  };
-  const url = "https://api.open-meteo.com/v1/forecast";
-  const responses = await fetchWeatherApi(url, params);
-
-  // Process first location. Add a for-loop for multiple locations or weather models
-  const response = responses[0];
-
-  // Attributes for timezone and location
-  const latitude = response.latitude();
-  const longitude = response.longitude();
-  const elevation = response.elevation();
-  const utcOffsetSeconds = response.utcOffsetSeconds();
-
-  console.log(
-    `\nCoordinates: ${latitude}°N ${longitude}°E`,
-    `\nElevation: ${elevation}m asl`,
-    `\nTimezone difference to GMT+0: ${utcOffsetSeconds}s`
+const USER_AGENT = {
+  headers: {
+    "User-Agent": "(my-weather-app, contact@example.com)", // <- put your app/email here
+  },
+};
+async function getForecast(lat: number, lon: number) {
+  const pointsRes = await fetch(
+    `https://api.weather.gov/points/${lat},${lon}`,
+    { headers: { "User-Agent": "(my-app, contact@example.com)" } }
   );
+  const pointsData = await pointsRes.json();
 
-  return response;
+  // Daily & hourly forecast URLs
+  const forecastUrl = pointsData.properties.forecast;
+  const hourlyUrl = pointsData.properties.forecastHourly;
+
+  const [dailyRes, hourlyRes] = await Promise.all([
+    fetch(forecastUrl, {
+      headers: { "User-Agent": "(my-app, contact@example.com)" },
+    }),
+    fetch(hourlyUrl, {
+      headers: { "User-Agent": "(my-app, contact@example.com)" },
+    }),
+  ]);
+
+  const dailyData = await dailyRes.json();
+  const hourlyData = await hourlyRes.json();
+
+  return {
+    daily: dailyData.properties.periods, // day/night with highs & lows
+    hourly: hourlyData.properties.periods, // hourly temps
+  };
 }
 
-useEffect(() => {
-  async function fetchData() {
-    const response = await loadWeatherData();
-    const hourly = response.hourly();
-    const utcOffsetSeconds = response.utcOffsetSeconds();
-    if (!hourly) {
-      console.warn("No hourly data found");
-      return;
+export default function WeatherScreen() {
+  const [forecast, setForecast] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      const data = await getForecast(40.71, -74.01);
+
+      const current = data.hourly[0]; // current hour
+      const todayHigh = data.daily[0].temperature; // today’s high
+      const tonightLow = data.daily[1].temperature; // tonight’s low
+
+      console.log("Current:", current.temperature, current.temperatureUnit);
+      console.log("High:", todayHigh, data.daily[0].temperatureUnit);
+      console.log("Low:", tonightLow, data.daily[1].temperatureUnit);
     }
-    const variable = hourly.variables(0);
-    if (!variable) {
-      console.warn("No variable[0] data found");
-      return;
-    }
 
-    const weatherData = {
-      hourly: {
-        time: [
-          ...Array(
-            (Number(hourly.timeEnd()) - Number(hourly.time())) /
-              hourly.interval()
-          ),
-        ].map(
-          (_, i) =>
-            new Date(
-              (Number(hourly.time()) +
-                i * hourly.interval() +
-                utcOffsetSeconds) *
-                1000
-            )
-        ),
-        temperature_2m: variable.valuesArray(),
-      },
-    };
-
-    console.log("\nHourly data", weatherData.hourly);
-  }
-
-  fetchData();
-}, []);
+    fetchData();
+  }, []);
+}
