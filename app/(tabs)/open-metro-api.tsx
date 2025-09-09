@@ -37,6 +37,11 @@ useEffect(() => {
       console.warn("No hourly data found");
       return;
     }
+    const variable = hourly.variables(0);
+    if (!variable) {
+      console.warn("No variable[0] data found");
+      return;
+    }
 
     const weatherData = {
       hourly: {
@@ -54,7 +59,7 @@ useEffect(() => {
                 1000
             )
         ),
-        temperature_2m: hourly.variables(0).valuesArray(),
+        temperature_2m: variable.valuesArray(),
       },
     };
 
